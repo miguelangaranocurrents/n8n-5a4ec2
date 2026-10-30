@@ -431,6 +431,27 @@ export const extendTransform = (expression: string): { code: string } | undefine
 			},
 		});
 
+		// JS forbids mixing `??` with `&&`/`||` without parentheses, but recast
+		// can drop the original parentheses when reprinting the rewritten nodes.
+		// Make them explicit so the output stays valid syntax.
+		const isNullish = (node: ExpressionKind) =>
+			node.type === 'LogicalExpression' && node.operator === '??';
+		const isAndOr = (node: ExpressionKind) =>
+			node.type === 'LogicalExpression' && (node.operator === '&&' || node.operator === '||');
+		visit(ast, {
+			visitLogicalExpression(path) {
+				this.traverse(path);
+				const node = path.node;
+				const needsGroup = node.operator === '??' ? isAndOr : isNullish;
+				if (needsGroup(node.left)) {
+					node.left = types.builders.parenthesizedExpression(node.left);
+				}
+				if (needsGroup(node.right)) {
+					node.right = types.builders.parenthesizedExpression(node.right);
+				}
+			},
+		});
+
 		return print(ast);
 	} catch (e) {
 		return;
